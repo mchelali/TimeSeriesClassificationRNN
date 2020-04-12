@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import os 
+import pandas as pd
+from collections import Counter
 
 
 class EarlyStopping:
@@ -199,8 +201,27 @@ def trainLSTM(net, trainLoader, valdLoader, **argv):
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    criterion = torch.nn.CrossEntropyLoss() 
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-5)
+    ############################################################################
+    #                  Conter le nombre d'instance des classes                 #
+    ############################################################################
+    #print(dir(trainLoader.dataset))
+    #print(trainLoader.dataset.classes)
+    #print(trainLoader.dataset.class_to_idx )
+
+    class_count = dict(Counter(a for a in trainLoader.dataset.y_true))
+    #print("class count", class_count)
+    #print(class_count.items())
+    class_count = np.array([class_count[t] for t in range(len(class_count.items()))])
+
+    class_count = class_count / class_count.sum()
+    class_count = (1. / class_count)
+    #class_count = class_count / class_count.sum()
+
+    print("class_count : ", class_count)
+    #exit(-1)
+    ############################################################################
+    criterion = torch.nn.CrossEntropyLoss(weight=torch.FloatTensor(class_count).to(device)) 
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-6)
     ############################################################################
     #                         Initialisation des parametres                    #
     ############################################################################
@@ -252,6 +273,7 @@ def trainLSTM(net, trainLoader, valdLoader, **argv):
         net.train()
         for data in trainLoader:
             series, label, id_poly = data
+            #print("shape features", series.shape)
 
             optimizer.zero_grad()
 
@@ -340,13 +362,13 @@ def trainLSTM(net, trainLoader, valdLoader, **argv):
 
 
 def testLSTM(net, testLoader, **argv):
-    classes = argv.setdefault("classes", [str(i) for i in testLoader.dataset.nb_classes])
+    classes = argv.setdefault("classes", [str(i) for i in range(testLoader.dataset.nb_classes)])
     path = argv.setdefault("path", "")
 
     print("nb exemple de test : ", len(testLoader.dataset))
-    p_pred = np.zeros((len(testLoader.dataset), testLoader.dataset.nb_classes), dtype=float)  # probailité des classes pour chaque image
-    p_true = np.zeros((len(testLoader.dataset), testLoader.dataset.label), dtype=int) # le label de la series ==> one hot encoder
-    polyInfos = np.zeros(len(testLoader.dataset), dtype=float)
+    p_pred = np.zeros((testLoader.dataset.data.shape[0], testLoader.dataset.nb_classes), dtype=float)  # probailité des classes pour chaque image
+    p_true = np.zeros((testLoader.dataset.data.shape[0], testLoader.dataset.nb_classes), dtype=int) # le label de la series ==> one hot encoder
+    polyInfos = np.zeros(testLoader.dataset.data.shape[0], dtype=float)
     
 
 
@@ -375,7 +397,7 @@ def testLSTM(net, testLoader, **argv):
         idx+=1
 
     matConf = computingConfMatrix(p_true, p_pred, testLoader.dataset.nb_classes)
-    C_poly_perpoly, C_poly_perpix, OA_poly_poly, OA_poly_pix = computingConfMatrixperPolygon(p_true, p_pred, polyInfos[:, 0], testLoader.dataset.nb_classes)
+    C_poly_perpoly, C_poly_perpix, OA_poly_poly, OA_poly_pix = computingConfMatrixperPolygon(p_true, p_pred, polyInfos, testLoader.dataset.nb_classes)
 
     save_confusion_matrix(matConf, classes, path + "rapport_classif_pixel.xlsx")
     save_confusion_matrix(C_poly_perpoly, classes, path + "rapport_classif_poly.xlsx")

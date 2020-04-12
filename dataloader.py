@@ -4,6 +4,13 @@ from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
 
+
+
+def categorizeClasses(a, classes):
+    return classes[a]
+
+cat = np.vectorize(categorizeClasses)
+
 # Create DataLoader
 class TimeSeriesDataSet(Dataset):
     """
@@ -15,6 +22,12 @@ class TimeSeriesDataSet(Dataset):
         """
         self.data = data
         self.label = label
+        self.class_to_idx = {l:i for i, l in enumerate(set(label))}
+        #print(self.class_to_idx)
+
+        self.y_true = cat(self.label, self.class_to_idx) 
+        #print(set(self.y_train))
+
         if id_poly is not None:
             self.id_poly = id_poly
         else:
@@ -29,9 +42,9 @@ class TimeSeriesDataSet(Dataset):
     
     def __getitem__(self, idx):
         if self.id_poly is None:
-            return self.data[idx, :], int(self.label[idx]-1)
+            return self.data[idx], int(self.y_true[idx])
         else:
-            return self.data[idx, :], int(self.label[idx]-1), self.id_poly[idx]
+            return self.data[idx], int(self.y_true[idx]), self.id_poly[idx]
 
 def computingMinMax(X, per=2):
 	min_per = np.percentile(X, per, axis=(0,1))
